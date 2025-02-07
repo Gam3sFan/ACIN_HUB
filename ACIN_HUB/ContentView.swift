@@ -57,9 +57,12 @@ struct ContentView: View {
     @State private var inputText = ""
     @State private var fragment = UserDefaults.standard.string(forKey: "fragment") ?? ""
     @State private var url = ""
+    @State private var reloadTrigger = 0
+    
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             WebView(urlString: url)
+                .id(reloadTrigger)
             Button(action: { showPopover = true }) {
                 Image(systemName: "gear")
                     .frame(width: 50, height: 50)
@@ -85,6 +88,9 @@ struct ContentView: View {
                         UserDefaults.standard.set(fragment, forKey: "fragment")
                         url = "http://10.107.188.153" + (fragment.isEmpty ? "" : "#\(fragment)")
                         showPopover = false
+                    }
+                    Button("↻") {
+                        reloadTrigger += 1
                     }
                 }
                 .frame(width: 300, height: 200)
