@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 import SystemConfiguration
 import Darwin
+import Network
 
 func getWiFiAddress() -> String? {
     var address: String?
@@ -52,12 +53,34 @@ struct WebView: UIViewRepresentable {
     }
 }
 
+// Publishes Wi‑Fi connectivity changes.
+final class NetworkMonitor: ObservableObject {
+    @Published var isConnected: Bool = false
+
+    private let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
+    private let queue = DispatchQueue(label: "NetworkMonitor")
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                self?.isConnected = (path.status == .satisfied)
+            }
+        }
+        monitor.start(queue: queue)
+    }
+
+    deinit {
+        monitor.cancel()
+    }
+}
+
 struct ContentView: View {
     @State private var showPopover = false
     @State private var inputText = ""
     @State private var fragment = UserDefaults.standard.string(forKey: "fragment") ?? ""
     @State private var url = ""
     @State private var reloadTrigger = 0
+    @StateObject private var networkMonitor = NetworkMonitor()
     
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -103,5 +126,10 @@ struct ContentView: View {
             inputText = fragment
         }
         .statusBar(hidden: true)
+        .onReceive(networkMonitor.$isConnected.removeDuplicates()) { connected in
+            if connected {
+                reloadTrigger += 1       // refresh WebView when Wi‑Fi becomes available
+            }
+        }
     }
 }
