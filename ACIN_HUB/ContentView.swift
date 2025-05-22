@@ -36,19 +36,23 @@ func getWiFiAddress() -> String? {
 }
 
 struct WebView: UIViewRepresentable {
-    let urlString: String
+    @Binding var urlString: String
+    @Binding var reloadTrigger: Int      // just a counter; its value isn’t used
+    
     func makeUIView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.scrollView.isScrollEnabled = false
-        if let url = URL(string: urlString) {
-            webView.load(URLRequest(url: url))
-        }
-        return webView
+        WKWebView(frame: .zero)          // one instance for life of the SwiftUI view
     }
+    
     func updateUIView(_ uiView: WKWebView, context: Context) {
         if let url = URL(string: urlString) {
-            uiView.load(URLRequest(url: url))
+            if uiView.url != url {
+                uiView.load(URLRequest(url: url))
+            } else if reloadTrigger != 0 {
+                uiView.reload()
+                DispatchQueue.main.async {   // bounce back onto SwiftUI thread
+                    reloadTrigger = 0        // one-shot
+                }
+            }
         }
     }
 }
@@ -84,8 +88,7 @@ struct ContentView: View {
     
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            WebView(urlString: url)
-                .id(reloadTrigger)
+            WebView(urlString: $url, reloadTrigger: $reloadTrigger)
             Button(action: { showPopover = true }) {
                 Image(systemName: "gear")
                     .frame(width: 50, height: 50)
@@ -128,7 +131,9 @@ struct ContentView: View {
         .statusBar(hidden: true)
         .onReceive(networkMonitor.$isConnected.removeDuplicates()) { connected in
             if connected {
-                reloadTrigger += 1       // refresh WebView when Wi‑Fi becomes available
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // wait a bit
+                    reloadTrigger += 1
+                }
             }
         }
     }
