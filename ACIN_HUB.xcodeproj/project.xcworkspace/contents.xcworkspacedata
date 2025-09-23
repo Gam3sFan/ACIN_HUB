@@ -4,4 +4,13 @@
    <FileRef
       location = "self:">
    </FileRef>
+   <FileRef
+      location = "group:MQTTWebSocketClient.swift">
+   </FileRef>
+   <FileRef
+      location = "group:IdleMotionBrightnessManager.swift">
+   </FileRef>
+   <FileRef
+      location = "group:AlarmPlayer.swift">
+   </FileRef>
 </Workspace>
