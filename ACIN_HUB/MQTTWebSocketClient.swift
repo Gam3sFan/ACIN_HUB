@@ -29,6 +29,7 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
 
     // Reconnect strategy (simple)
     private var reconnectWorkItem: DispatchWorkItem?
+    private var suppressReconnectAfterClose = false
 
     // Publish queue when not connected
     private var pendingPublishes: [(topic: String, payload: Data, retain: Bool)] = []
@@ -87,7 +88,7 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
             return
         }
 
-        disconnect()
+        disconnect(suppressReconnect: false)
         // Request the MQTT subprotocol so brokers that require it accept the handshake.
         // URLSession will silently refuse the connection when the server rejects our subprotocol set,
         // so if a broker does not support this header we can reconsider making it configurable.
@@ -99,7 +100,10 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
         receiveNext()
     }
 
-    func disconnect() {
+    func disconnect(suppressReconnect: Bool = true) {
+        if suppressReconnect {
+            suppressReconnectAfterClose = true
+        }
         log("WS disconnect")
         onConnectionChange?(false)
         if isMQTTConnected {
@@ -111,6 +115,8 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
         incomingBuffer.removeAll()
         if let task = task {
             task.cancel(with: .goingAway, reason: nil)
+        } else if suppressReconnect {
+            suppressReconnectAfterClose = false
         }
         task = nil
     }
@@ -268,6 +274,11 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
     }
 
     private func scheduleReconnect() {
+        if suppressReconnectAfterClose {
+            log("Reconnect suppressed by caller")
+            suppressReconnectAfterClose = false
+            return
+        }
         pingTimer?.invalidate(); pingTimer = nil
         reconnectWorkItem?.cancel()
         log("Scheduling reconnect (opened=\(hasOpenedWebSocket))")
