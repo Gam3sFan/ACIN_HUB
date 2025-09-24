@@ -88,7 +88,7 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
             return
         }
 
-        disconnect(suppressReconnect: false)
+        disconnect()
         // Request the MQTT subprotocol so brokers that require it accept the handshake.
         // URLSession will silently refuse the connection when the server rejects our subprotocol set,
         // so if a broker does not support this header we can reconsider making it configurable.
@@ -110,6 +110,7 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
             publishAvailability(online: false)
         }
         pingTimer?.invalidate(); pingTimer = nil
+        reconnectWorkItem?.cancel(); reconnectWorkItem = nil
         isMQTTConnected = false
         hasOpenedWebSocket = false
         incomingBuffer.removeAll()
@@ -274,13 +275,14 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
     }
 
     private func scheduleReconnect() {
+        pingTimer?.invalidate(); pingTimer = nil
+        reconnectWorkItem?.cancel()
         if suppressReconnectAfterClose {
             log("Reconnect suppressed by caller")
             suppressReconnectAfterClose = false
+            reconnectWorkItem = nil
             return
         }
-        pingTimer?.invalidate(); pingTimer = nil
-        reconnectWorkItem?.cancel()
         log("Scheduling reconnect (opened=\(hasOpenedWebSocket))")
         let item = DispatchWorkItem { [weak self] in self?.connect() }
         reconnectWorkItem = item
@@ -326,7 +328,7 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
         var payload = Data()
         payload.append(mqttString(clientIdentifier))
         let willTopic = topicPath([deviceId, "availability"])
-        let willMessage = "availability=offline"
+        let willMessage = "offline"
         payload.append(mqttString(willTopic))
         payload.append(mqttString(willMessage))
         if let username = username { payload.append(mqttString(username)) }

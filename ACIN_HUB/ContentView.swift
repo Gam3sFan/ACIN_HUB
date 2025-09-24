@@ -133,6 +133,8 @@ struct ContentView: View {
     }()
 
     @State private var statusIntervalMinutes: Int = 60
+    @State private var lastMQTTStatusSentAt: Date = .distantPast
+    @State private var lastWebReloadAt: Date = .distantPast
 
     private let alarmPlayer = AlarmPlayer()
     private let videoUploader = VideoCaptureUploader(uploadURL: URL(string: "http://10.107.188.153:3006/upload")!)
@@ -183,7 +185,7 @@ struct ContentView: View {
 
                             // Refresh
                             Button(action: {
-                                reloadTrigger += 1
+                                triggerWebReload(force: true)
                             }) {
                                 Image(systemName: "arrow.clockwise.circle.fill")
                                     .font(.title2)
@@ -214,7 +216,7 @@ struct ContentView: View {
                             Text("Battery: \(Int(UIDevice.current.batteryLevel * 100))% - \(batteryStateString())")
                                 .font(.footnote)
                             Button("Invia stato MQTT ora") {
-                                publishMQTTStatusNow()
+                                publishMQTTStatus(force: true)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
@@ -306,14 +308,14 @@ struct ContentView: View {
             // Periodic MQTT status every X minutes
             mqttTimer?.invalidate()
             mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
-                publishMQTTStatusNow()
+                publishMQTTStatus()
             }
         }
         .statusBar(hidden: true)
         .onReceive(networkMonitor.$isConnected.removeDuplicates()) { connected in
             if connected {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // wait a bit
-                    reloadTrigger += 1
+                    triggerWebReload()
                 }
             }
         }
@@ -440,7 +442,7 @@ struct ContentView: View {
                         UserDefaults.standard.set(statusIntervalMinutes, forKey: "mqtt_status_minutes")
                         mqttTimer?.invalidate()
                         mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
-                            publishMQTTStatusNow()
+                            publishMQTTStatus()
                         }
                         if let url = URL(string: brokerURLString), let client = mqttClient {
                             client.updateConfig(wsURL: url, username: brokerUsername, password: brokerPassword, topicPrefix: prefix)
@@ -468,7 +470,7 @@ struct ContentView: View {
             let ts = Date()
             videoUploader.captureAndUpload(deviceName: deviceName, timestamp: ts)
             startAlarm()
-            publishMQTTStatusNow()
+            publishMQTTStatus(force: true)
         }
         isCharging = charging
         if charging {
@@ -516,7 +518,7 @@ struct ContentView: View {
                 mqttConnected = connected
                 appendMQTTLog("Connection: \(connected ? "online" : "offline")")
                 if connected {
-                    publishMQTTStatusNow()
+                    publishMQTTStatus()
                 }
             }
         }
@@ -531,8 +533,17 @@ struct ContentView: View {
         client.connect()
     }
 
-    private func publishMQTTStatusNow() {
+    private func publishMQTTStatus(force: Bool = false) {
         guard let client = mqttClient else { return }
+        let now = Date()
+        if !force {
+            let minInterval: TimeInterval = 10
+            if now.timeIntervalSince(lastMQTTStatusSentAt) < minInterval {
+                appendMQTTLog("Status publish skipped (throttled)")
+                return
+            }
+        }
+        lastMQTTStatusSentAt = now
         let name = deviceName
         let slug = deviceSlug.isEmpty ? makeMQTTDeviceSlug(from: name) : deviceSlug
         deviceSlug = slug
@@ -564,6 +575,18 @@ struct ContentView: View {
             idleSeconds: brightnessManager.idleSeconds
         )
         client.publishStatus(json: json)
+    }
+
+    private func triggerWebReload(force: Bool = false) {
+        let now = Date()
+        if !force {
+            let minInterval: TimeInterval = 5
+            if now.timeIntervalSince(lastWebReloadAt) < minInterval {
+                return
+            }
+        }
+        lastWebReloadAt = now
+        reloadTrigger += 1
     }
 
     private func appendMQTTLog(_ message: String) {
@@ -603,7 +626,7 @@ struct ContentView: View {
         let lower = command.lowercased()
         appendMQTTLog("Command received: \(command)")
         if lower == "get_status" {
-            publishMQTTStatusNow()
+            publishMQTTStatus(force: true)
             return true
         }
         if lower.hasPrefix("alert:") {
@@ -617,7 +640,7 @@ struct ContentView: View {
             inputText = value
             UserDefaults.standard.set(fragment, forKey: "fragment")
             url = baseServerURL + (fragment.isEmpty ? "" : "#\(fragment)")
-            reloadTrigger += 1
+            triggerWebReload(force: true)
             return true
         }
         if lower == "close_app" {
