@@ -41,7 +41,7 @@ final class IdleMotionBrightnessManager: ObservableObject {
     /// Seconds of inactivity before dimming
     @Published var idleSeconds: Int {
         didSet {
-            let clamped = max(10, min(3600, idleSeconds))
+        let clamped = max(20, min(3600, idleSeconds))
             if idleSeconds != clamped {
                 idleSeconds = clamped
                 return
@@ -65,6 +65,7 @@ final class IdleMotionBrightnessManager: ObservableObject {
         if defaults.object(forKey: "motionSensitivity") == nil { self.motionSensitivity = 5 }
         self.idleSeconds = defaults.integer(forKey: "idleSeconds")
         if defaults.object(forKey: "idleSeconds") == nil { self.idleSeconds = 90 }
+        if self.idleSeconds < 20 { self.idleSeconds = 20 }
 
         start()
     }

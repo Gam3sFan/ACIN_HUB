@@ -5,6 +5,7 @@ import Darwin
 import Network
 import AVFoundation
 import CoreMotion
+import Foundation
 
 func getWiFiAddress() -> String? {
     var address: String?
@@ -35,6 +36,21 @@ func getWiFiAddress() -> String? {
         freeifaddrs(ifaddr)
     }
     return address
+}
+
+func makeMQTTDeviceSlug(from name: String) -> String {
+    let folded = name.folding(options: [.diacriticInsensitive], locale: .current)
+    let lowered = folded.lowercased()
+    let filtered = lowered.filter { $0.isLetter || $0.isNumber }
+    return filtered.isEmpty ? "device" : filtered
+}
+
+func normalizedTopicPrefix(_ prefix: String) -> String {
+    prefix
+        .split(separator: "/")
+        .map { String($0) }
+        .filter { !$0.isEmpty }
+        .joined(separator: "/")
 }
 
 struct WebView: UIViewRepresentable {
@@ -94,6 +110,7 @@ struct ContentView: View {
     @State private var alarmOpacity: Double = 1.0
     @State private var isPlayingAlarm = false
     @State private var deviceName: String = UIDevice.current.name
+    @State private var deviceSlug: String = makeMQTTDeviceSlug(from: UIDevice.current.name)
 
     @StateObject private var brightnessManager = IdleMotionBrightnessManager()
 
@@ -110,12 +127,12 @@ struct ContentView: View {
     @State private var brokerURLString: String = UserDefaults.standard.string(forKey: "mqtt_ws_url") ?? "ws://10.107.188.153:8888"
     @State private var brokerUsername: String = UserDefaults.standard.string(forKey: "mqtt_ws_user") ?? "user"
     @State private var brokerPassword: String = UserDefaults.standard.string(forKey: "mqtt_ws_pass") ?? "user"
-    @State private var brokerTopicPrefix: String = UserDefaults.standard.string(forKey: "mqtt_topic_prefix") ?? "office/ipads"
-
-    @State private var statusIntervalMinutes: Int = {
-        let v = UserDefaults.standard.integer(forKey: "mqtt_status_minutes")
-        return v == 0 ? 60 : v
+    @State private var brokerTopicPrefix: String = {
+        let stored = UserDefaults.standard.string(forKey: "mqtt_topic_prefix") ?? "office/ipads"
+        return normalizedTopicPrefix(stored)
     }()
+
+    @State private var statusIntervalMinutes: Int = 60
 
     private let alarmPlayer = AlarmPlayer()
     private let videoUploader = VideoCaptureUploader(uploadURL: URL(string: "http://10.107.188.153:3006/upload")!)
@@ -270,6 +287,12 @@ struct ContentView: View {
         .onAppear {
             url = baseServerURL + (fragment.isEmpty ? "" : "#\(fragment)")
             inputText = fragment
+            let currentName = UIDevice.current.name
+            deviceName = currentName
+            deviceSlug = makeMQTTDeviceSlug(from: currentName)
+            brokerTopicPrefix = normalizedTopicPrefix(brokerTopicPrefix)
+            statusIntervalMinutes = 60
+            UserDefaults.standard.set(statusIntervalMinutes, forKey: "mqtt_status_minutes")
             
             UIDevice.current.isBatteryMonitoringEnabled = true
             isCharging = (UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full)
@@ -282,7 +305,7 @@ struct ContentView: View {
             videoUploader.onLog = { msg in appendMQTTLog("Video: \(msg)") }
             // Periodic MQTT status every X minutes
             mqttTimer?.invalidate()
-            mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(statusIntervalMinutes * 60), repeats: true) { _ in
+            mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
                 publishMQTTStatusNow()
             }
         }
@@ -335,12 +358,7 @@ struct ContentView: View {
                             TextField("office/ipads", text: $brokerTopicPrefix)
                                 .textInputAutocapitalization(.never)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
-                            Text("Invio stato ogni (min)")
-                            HStack {
-                                Slider(value: Binding(get: { Double(statusIntervalMinutes) }, set: { statusIntervalMinutes = Int($0) }), in: 1...240)
-                                Text("\(statusIntervalMinutes)")
-                                    .frame(width: 40, alignment: .trailing)
-                            }
+                            Text("Invio stato ogni 60 minuti (fisso)")
                         }
 
                         VStack(alignment: .leading, spacing: 10) {
@@ -375,7 +393,7 @@ struct ContentView: View {
                                 Stepper("\(brightnessManager.idleSeconds)s", value: Binding(
                                     get: { brightnessManager.idleSeconds },
                                     set: { brightnessManager.idleSeconds = $0 }
-                                ), in: 10...600, step: 10)
+                                ), in: 20...600, step: 10)
                             }
                         }
 
@@ -412,17 +430,20 @@ struct ContentView: View {
                     }
                     .buttonStyle(.bordered)
                     Button(action: {
+                        let prefix = normalizedTopicPrefix(brokerTopicPrefix)
+                        brokerTopicPrefix = prefix
                         UserDefaults.standard.set(brokerURLString, forKey: "mqtt_ws_url")
                         UserDefaults.standard.set(brokerUsername, forKey: "mqtt_ws_user")
                         UserDefaults.standard.set(brokerPassword, forKey: "mqtt_ws_pass")
-                        UserDefaults.standard.set(brokerTopicPrefix, forKey: "mqtt_topic_prefix")
+                        UserDefaults.standard.set(prefix, forKey: "mqtt_topic_prefix")
+                        statusIntervalMinutes = 60
                         UserDefaults.standard.set(statusIntervalMinutes, forKey: "mqtt_status_minutes")
                         mqttTimer?.invalidate()
-                        mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(statusIntervalMinutes * 60), repeats: true) { _ in
+                        mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
                             publishMQTTStatusNow()
                         }
                         if let url = URL(string: brokerURLString), let client = mqttClient {
-                            client.updateConfig(wsURL: url, username: brokerUsername, password: brokerPassword, topicPrefix: brokerTopicPrefix)
+                            client.updateConfig(wsURL: url, username: brokerUsername, password: brokerPassword, topicPrefix: prefix)
                         } else {
                             setupMQTT()
                         }
@@ -480,8 +501,11 @@ struct ContentView: View {
 
     private func setupMQTT() {
         guard let url = URL(string: brokerURLString) else { return }
-        let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? "device"
-        let client = MQTTWebSocketClient(wsURL: url, username: brokerUsername, password: brokerPassword, topicPrefix: brokerTopicPrefix, deviceId: deviceId)
+        let slug = deviceSlug.isEmpty ? makeMQTTDeviceSlug(from: deviceName) : deviceSlug
+        deviceSlug = slug
+        let prefix = normalizedTopicPrefix(brokerTopicPrefix)
+        brokerTopicPrefix = prefix
+        let client = MQTTWebSocketClient(wsURL: url, username: brokerUsername, password: brokerPassword, topicPrefix: prefix, deviceId: slug)
         self.mqttClient = client
 
         client.onLog = { message in
@@ -491,6 +515,9 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 mqttConnected = connected
                 appendMQTTLog("Connection: \(connected ? "online" : "offline")")
+                if connected {
+                    publishMQTTStatusNow()
+                }
             }
         }
         client.onMessage = { topic, payload in
@@ -507,9 +534,22 @@ struct ContentView: View {
     private func publishMQTTStatusNow() {
         guard let client = mqttClient else { return }
         let name = deviceName
-        let batteryLevel = max(0, Int(UIDevice.current.batteryLevel * 100))
+        let slug = deviceSlug.isEmpty ? makeMQTTDeviceSlug(from: name) : deviceSlug
+        deviceSlug = slug
+        let prefix = normalizedTopicPrefix(brokerTopicPrefix)
+        let topicBaseSegments = [prefix, slug].filter { !$0.isEmpty }
+        let topicBase = topicBaseSegments.joined(separator: "/")
+        let rawBattery = UIDevice.current.batteryLevel
+        let batteryLevel: Int
+        if rawBattery < 0 {
+            batteryLevel = -1
+        } else {
+            batteryLevel = Int(round(rawBattery * 100))
+        }
         let ip = getWiFiAddress()
-        let topicBase = "office/ipads/\(UIDevice.current.identifierForVendor?.uuidString ?? "device")"
+        let dimBrightness = Double(brightnessManager.dimBrightnessPercent) / 100.0
+        let activeBrightness = Double(brightnessManager.activeBrightnessPercent) / 100.0
+        let motionThreshold = 0.15 / Double(max(1, brightnessManager.motionSensitivity))
         let json = DeviceStatusBuilder.makeJSON(
             deviceName: name,
             batteryLevel: batteryLevel,
@@ -517,10 +557,10 @@ struct ContentView: View {
             wifiIP: ip,
             online: true,
             topicBase: topicBase,
-            fragment: fragment.isEmpty ? "kiosk/home" : fragment,
-            dimBrightness: brightnessManager.dimBrightnessPercent,
-            activeBrightness: brightnessManager.activeBrightnessPercent,
-            motionThreshold: brightnessManager.motionSensitivity,
+            fragment: fragment.isEmpty ? "insight" : fragment,
+            dimBrightness: dimBrightness,
+            activeBrightness: activeBrightness,
+            motionThreshold: motionThreshold,
             idleSeconds: brightnessManager.idleSeconds
         )
         client.publishStatus(json: json)
@@ -535,31 +575,60 @@ struct ContentView: View {
 
     private func handleMQTTCommand(_ command: String) {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.lowercased() == "get_status" {
+        guard !trimmed.isEmpty else { return }
+
+        if handleStructuredMQTTCommand(trimmed) { return }
+        if handleSimpleMQTTCommand(trimmed) { return }
+        appendMQTTLog("Ignored MQTT command: \(trimmed)")
+    }
+
+    private func handleStructuredMQTTCommand(_ command: String) -> Bool {
+        guard command.first == "{" else { return false }
+        guard let data = command.data(using: .utf8) else { return false }
+        guard let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
+            appendMQTTLog("Failed to parse JSON command: \(command)")
+            return false
+        }
+
+        if let raw = (json["command"] as? String) ?? (json["action"] as? String) ?? (json["cmd"] as? String) {
+            return handleSimpleMQTTCommand(raw)
+        }
+        if let closeRequested = json["close_app"] as? Bool, closeRequested {
+            return handleSimpleMQTTCommand("close_app")
+        }
+        return false
+    }
+
+    private func handleSimpleMQTTCommand(_ command: String) -> Bool {
+        let lower = command.lowercased()
+        appendMQTTLog("Command received: \(command)")
+        if lower == "get_status" {
             publishMQTTStatusNow()
-            return
+            return true
         }
-        if trimmed.lowercased().hasPrefix("alert:") {
-            let msg = String(trimmed.dropFirst("alert:".count)).trimmingCharacters(in: .whitespaces)
+        if lower.hasPrefix("alert:") {
+            let msg = String(command.dropFirst("alert:".count)).trimmingCharacters(in: .whitespaces)
             showBannerMessage(msg)
-            return
+            return true
         }
-        if trimmed.lowercased().hasPrefix("set_fragment:") {
-            let value = String(trimmed.dropFirst("set_fragment:".count)).trimmingCharacters(in: .whitespaces)
+        if lower.hasPrefix("set_fragment:") {
+            let value = String(command.dropFirst("set_fragment:".count)).trimmingCharacters(in: .whitespaces)
             fragment = value
             inputText = value
             UserDefaults.standard.set(fragment, forKey: "fragment")
             url = baseServerURL + (fragment.isEmpty ? "" : "#\(fragment)")
             reloadTrigger += 1
-            return
+            return true
         }
-        if trimmed.lowercased() == "close_app" {
+        if lower == "close_app" {
             appendMQTTLog("Closing app on command")
+            mqttClient?.disconnect()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 exit(0)
             }
-            return
+            return true
         }
+        return false
     }
 
     private func showBannerMessage(_ text: String) {
