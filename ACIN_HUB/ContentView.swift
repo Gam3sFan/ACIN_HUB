@@ -124,7 +124,6 @@ struct ContentView: View {
     @State private var mqttLogs: [String] = []
     @State private var mqttConnected: Bool = false
 
-    @State private var brokerURLString: String = UserDefaults.standard.string(forKey: "mqtt_ws_url") ?? "ws://10.107.188.153:8888"
     @State private var brokerUsername: String = UserDefaults.standard.string(forKey: "mqtt_ws_user") ?? "user"
     @State private var brokerPassword: String = UserDefaults.standard.string(forKey: "mqtt_ws_pass") ?? "user"
     @State private var brokerTopicPrefix: String = {
@@ -345,17 +344,6 @@ struct ContentView: View {
                             Text(mqttConnected ? "Connesso" : "Disconnesso").font(.subheadline)
                         }
                         Group {
-                            Text("Broker WebSocket URL")
-                            TextField("ws://host:port", text: $brokerURLString)
-                                .textInputAutocapitalization(.never)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            Text("Username")
-                            TextField("username", text: $brokerUsername)
-                                .textInputAutocapitalization(.never)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            Text("Password")
-                            SecureField("password", text: $brokerPassword)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
                             Text("Topic Prefix")
                             TextField("office/ipads", text: $brokerTopicPrefix)
                                 .textInputAutocapitalization(.never)
@@ -434,9 +422,6 @@ struct ContentView: View {
                     Button(action: {
                         let prefix = normalizedTopicPrefix(brokerTopicPrefix)
                         brokerTopicPrefix = prefix
-                        UserDefaults.standard.set(brokerURLString, forKey: "mqtt_ws_url")
-                        UserDefaults.standard.set(brokerUsername, forKey: "mqtt_ws_user")
-                        UserDefaults.standard.set(brokerPassword, forKey: "mqtt_ws_pass")
                         UserDefaults.standard.set(prefix, forKey: "mqtt_topic_prefix")
                         statusIntervalMinutes = 60
                         UserDefaults.standard.set(statusIntervalMinutes, forKey: "mqtt_status_minutes")
@@ -444,8 +429,8 @@ struct ContentView: View {
                         mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
                             publishMQTTStatus()
                         }
-                        if let url = URL(string: brokerURLString), let client = mqttClient {
-                            client.updateConfig(wsURL: url, username: brokerUsername, password: brokerPassword, topicPrefix: prefix)
+                        if let url = URL(string: "ws://10.107.188.153:8888"), let client = mqttClient {
+                            client.updateConfig(wsURL: url, username: "user", password: "user", topicPrefix: prefix)
                         } else {
                             setupMQTT()
                         }
@@ -502,12 +487,12 @@ struct ContentView: View {
     }
 
     private func setupMQTT() {
-        guard let url = URL(string: brokerURLString) else { return }
+        guard let url = URL(string: "ws://10.107.188.153:8888") else { return }
         let slug = deviceSlug.isEmpty ? makeMQTTDeviceSlug(from: deviceName) : deviceSlug
         deviceSlug = slug
         let prefix = normalizedTopicPrefix(brokerTopicPrefix)
         brokerTopicPrefix = prefix
-        let client = MQTTWebSocketClient(wsURL: url, username: brokerUsername, password: brokerPassword, topicPrefix: prefix, deviceId: slug)
+        let client = MQTTWebSocketClient(wsURL: url, username: "user", password: "user", topicPrefix: prefix, deviceId: slug)
         self.mqttClient = client
 
         client.onLog = { message in
