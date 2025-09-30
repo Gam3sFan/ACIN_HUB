@@ -451,11 +451,14 @@ struct ContentView: View {
         if isCharging && !charging {
             // Just unplugged
             showPowerAlert = true
-            UIScreen.main.brightness = 1.0
+            brightnessManager.setForcedBrightnessPercent(100)
             let ts = Date()
             videoUploader.captureAndUpload(deviceName: deviceName, timestamp: ts)
             startAlarm()
             publishMQTTStatus(force: true)
+        }
+        if !isCharging && charging {
+            brightnessManager.setForcedBrightnessPercent(nil)
         }
         isCharging = charging
         if charging {
@@ -546,6 +549,21 @@ struct ContentView: View {
         let dimBrightness = Double(brightnessManager.dimBrightnessPercent) / 100.0
         let activeBrightness = Double(brightnessManager.activeBrightnessPercent) / 100.0
         let motionThreshold = 0.15 / Double(max(1, brightnessManager.motionSensitivity))
+        let appVersion: String = {
+            let info = Bundle.main.infoDictionary
+            let short = info?["CFBundleShortVersionString"] as? String
+            let build = info?["CFBundleVersion"] as? String
+            switch (short, build) {
+            case let (s?, b?) where s != b:
+                return "\(s) (\(b))"
+            case let (s?, _):
+                return s
+            case let (_, b?):
+                return b
+            default:
+                return "unknown"
+            }
+        }()
         let json = DeviceStatusBuilder.makeJSON(
             deviceName: name,
             batteryLevel: batteryLevel,
@@ -557,21 +575,20 @@ struct ContentView: View {
             dimBrightness: dimBrightness,
             activeBrightness: activeBrightness,
             motionThreshold: motionThreshold,
-            idleSeconds: brightnessManager.idleSeconds
+            idleSeconds: brightnessManager.idleSeconds,
+            appVersion: appVersion
         )
         client.publishStatus(json: json)
     }
 
     private func triggerWebReload(force: Bool = false) {
         let now = Date()
-        if !force {
-            let minInterval: TimeInterval = 5
-            if now.timeIntervalSince(lastWebReloadAt) < minInterval {
-                return
-            }
+        let minInterval: TimeInterval = force ? 0 : 60
+        if !force && now.timeIntervalSince(lastWebReloadAt) < minInterval {
+            return
         }
         lastWebReloadAt = now
-        reloadTrigger += 1
+        reloadTrigger &+= 1
     }
 
     private func appendMQTTLog(_ message: String) {

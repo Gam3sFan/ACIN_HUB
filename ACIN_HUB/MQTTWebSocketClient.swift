@@ -34,6 +34,13 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
     // Publish queue when not connected
     private var pendingPublishes: [(topic: String, payload: Data, retain: Bool)] = []
 
+    // Availability throttling
+    private var lastOfflineAvailabilitySentAt: Date?
+    private let availabilityOfflineCooldown: TimeInterval = 5 * 60
+
+    // Reconnect backoff
+    private var reconnectAttempt: Int = 0
+
     private let mqttSubprotocols = ["mqtt", "mqttv3.1", "mqttv3.1.1"]
     private var hasOpenedWebSocket = false
     private lazy var clientIdentifier: String = {
@@ -112,6 +119,7 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
         pingTimer?.invalidate(); pingTimer = nil
         reconnectWorkItem?.cancel(); reconnectWorkItem = nil
         isMQTTConnected = false
+        reconnectAttempt = 0
         hasOpenedWebSocket = false
         incomingBuffer.removeAll()
         if let task = task {
@@ -132,12 +140,25 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
     func publishAvailability(online: Bool) {
         let topic = topicPath([deviceId, "availability"])
         guard let data = "\(online ? "online" : "offline")".data(using: .utf8) else { return }
+        if !online {
+            let now = Date()
+            if let last = lastOfflineAvailabilitySentAt, now.timeIntervalSince(last) < availabilityOfflineCooldown {
+                let remaining = availabilityOfflineCooldown - now.timeIntervalSince(last)
+                let seconds = max(1, Int(remaining.rounded()))
+                log("Skipping availability offline publish (cooldown active ~\(seconds)s)")
+                return
+            }
+            lastOfflineAvailabilitySentAt = now
+        }
         log("Publishing availability \(online ? "online" : "offline")")
         publish(topic: topic, payload: data, retain: true)
     }
 
     func publish(topic: String, payload: Data, retain: Bool = false) {
         guard isMQTTConnected else {
+            if pendingPublishes.count >= 50 {
+                pendingPublishes.removeFirst(pendingPublishes.count - 49)
+            }
             pendingPublishes.append((topic, payload, retain))
             log("Queued publish for \(topic) bytes=\(payload.count)")
             return
@@ -239,6 +260,7 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
             }
             if ackFlags == 0x00, returnCode == 0x00 {
                 isMQTTConnected = true
+                reconnectAttempt = 0
                 log("MQTT CONNACK success")
                 onConnectionChange?(true)
                 // Auto-subscribe to cmd topic
@@ -283,10 +305,17 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
             reconnectWorkItem = nil
             return
         }
-        log("Scheduling reconnect (opened=\(hasOpenedWebSocket))")
+        reconnectAttempt += 1
+        let cappedAttempt = min(max(reconnectAttempt, 1), 8)
+        let baseDelay: TimeInterval = 2.0
+        let exponential = pow(1.8, Double(cappedAttempt - 1))
+        let delay = min(baseDelay * exponential, 60.0)
+        let jitter = Double.random(in: 0.5...1.5)
+        let scheduledDelay = delay * jitter
+        log("Scheduling reconnect in \(String(format: "%.1f", scheduledDelay))s (attempt #\(reconnectAttempt), opened=\(hasOpenedWebSocket))")
         let item = DispatchWorkItem { [weak self] in self?.connect() }
         reconnectWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + scheduledDelay, execute: item)
     }
 
     private func sanitizedWSURL(_ input: URL) -> URL {
@@ -513,7 +542,7 @@ final class MQTTWebSocketClient: NSObject, URLSessionWebSocketDelegate {
 
 /// Helper to build JSON status payloads consistently.
 struct DeviceStatusBuilder {
-    static func makeJSON(deviceName: String, batteryLevel: Int, batteryState: String, wifiIP: String?, online: Bool, topicBase: String, fragment: String, dimBrightness: Double, activeBrightness: Double, motionThreshold: Double, idleSeconds: Int, timestamp: Date = Date()) -> Data {
+    static func makeJSON(deviceName: String, batteryLevel: Int, batteryState: String, wifiIP: String?, online: Bool, topicBase: String, fragment: String, dimBrightness: Double, activeBrightness: Double, motionThreshold: Double, idleSeconds: Int, appVersion: String, timestamp: Date = Date()) -> Data {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime]
         let dict: [String: Any] = [
@@ -523,6 +552,7 @@ struct DeviceStatusBuilder {
             "online": online,
             "batteryState": batteryState,
             "deviceName": deviceName,
+            "appVersion": appVersion,
             "fragment": fragment,
             "wifiIP": wifiIP ?? "N/A",
             "settings": [

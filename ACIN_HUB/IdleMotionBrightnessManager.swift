@@ -54,6 +54,7 @@ final class IdleMotionBrightnessManager: ObservableObject {
     private var timer: Timer?
     private var lastInteraction: Date = Date()
     private var lastMagnitude: Double?
+    private var forcedBrightnessPercent: Int?
 
     init() {
         let defaults = UserDefaults.standard
@@ -90,7 +91,8 @@ final class IdleMotionBrightnessManager: ObservableObject {
             self?.tick()
         }
         // Set initial brightness to active
-        applyBrightness(percent: activeBrightnessPercent)
+        let initial = forcedBrightnessPercent ?? activeBrightnessPercent
+        applyBrightness(percent: initial)
     }
 
     func stop() {
@@ -101,7 +103,26 @@ final class IdleMotionBrightnessManager: ObservableObject {
     /// Call this from any touch/gesture to reset idle timer and ensure active brightness.
     func noteUserInteraction() {
         lastInteraction = Date()
-        applyBrightness(percent: activeBrightnessPercent)
+        let target = forcedBrightnessPercent ?? activeBrightnessPercent
+        applyBrightness(percent: target)
+    }
+
+    func setForcedBrightnessPercent(_ percent: Int?) {
+        let work = {
+            let clamped = percent.map { max(0, min(100, $0)) }
+            self.forcedBrightnessPercent = clamped
+            if let forced = clamped {
+                self.lastInteraction = Date()
+                self.applyBrightness(percent: forced)
+            } else {
+                self.noteUserInteraction()
+            }
+        }
+        if Thread.isMainThread {
+            work()
+        } else {
+            DispatchQueue.main.async(execute: work)
+        }
     }
 
     private func processVector(x: Double, y: Double, z: Double) {
@@ -124,6 +145,9 @@ final class IdleMotionBrightnessManager: ObservableObject {
     }
 
     private func tick() {
+        if forcedBrightnessPercent != nil {
+            return
+        }
         let elapsed = Date().timeIntervalSince(lastInteraction)
         if elapsed >= TimeInterval(idleSeconds) {
             applyBrightness(percent: dimBrightnessPercent)
@@ -131,10 +155,15 @@ final class IdleMotionBrightnessManager: ObservableObject {
     }
 
     private func applyBrightness(percent: Int) {
-        let clamped = max(0, min(100, percent))
+        let target = forcedBrightnessPercent ?? percent
+        let clamped = max(0, min(100, target))
         let value = CGFloat(clamped) / 100.0
-        DispatchQueue.main.async {
+        if Thread.isMainThread {
             UIScreen.main.brightness = value
+        } else {
+            DispatchQueue.main.async {
+                UIScreen.main.brightness = value
+            }
         }
     }
 
