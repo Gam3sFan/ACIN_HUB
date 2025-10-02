@@ -6,8 +6,6 @@ final class AlarmPlayer {
     private var player: AVAudioPlayer?
     private var rampTimer: Timer?
 
-    /// Starts playing the alarm sound with a volume ramp from low to full over the given seconds.
-    /// If the bundled file "Alarm_Haptic.caf" is not found, falls back to a short system sound.
     func start(volumeRampDuration: TimeInterval = 8.0) {
         stop()
         do {

@@ -97,6 +97,8 @@ final class NetworkMonitor: ObservableObject {
 }
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var showPopover = false
     @State private var inputText = ""
     @State private var fragment = UserDefaults.standard.string(forKey: "fragment") ?? ""
@@ -117,6 +119,8 @@ struct ContentView: View {
     // MQTT
     @State private var mqttClient: MQTTWebSocketClient? = nil
     @State private var mqttTimer: Timer? = nil
+    @State private var mqttReconnectTimer: Timer? = nil
+    @State private var mqttAvailabilityTimer: Timer? = nil
 
     @State private var showBanner = false
     @State private var bannerText = ""
@@ -133,6 +137,8 @@ struct ContentView: View {
 
     @State private var statusIntervalMinutes: Int = 60
     @State private var lastMQTTStatusSentAt: Date = .distantPast
+    @State private var lastMQTTConnectAttempt: Date = .distantPast
+    @State private var lastAvailabilitySentAt: Date = .distantPast
     @State private var lastWebReloadAt: Date = .distantPast
 
     private let alarmPlayer = AlarmPlayer()
@@ -309,18 +315,38 @@ struct ContentView: View {
             mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
                 publishMQTTStatus()
             }
+            mqttReconnectTimer?.invalidate()
+            mqttReconnectTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+                ensureMQTTConnection()
+            }
+            ensureMQTTConnection(force: true)
+            mqttAvailabilityTimer?.invalidate()
+            mqttAvailabilityTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(30 * 60), repeats: true) { _ in
+                sendAvailabilityHeartbeat()
+            }
+            sendAvailabilityHeartbeat(force: true)
         }
         .statusBar(hidden: true)
         .onReceive(networkMonitor.$isConnected.removeDuplicates()) { connected in
             if connected {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // wait a bit
                     triggerWebReload()
+                    ensureMQTTConnection(force: true)
+                    sendAvailabilityHeartbeat(force: true)
                 }
+            }
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                ensureMQTTConnection(force: true)
+                sendAvailabilityHeartbeat(force: true)
             }
         }
         .onDisappear {
             NotificationCenter.default.removeObserver(self, name: UIDevice.batteryStateDidChangeNotification, object: nil)
             mqttTimer?.invalidate(); mqttTimer = nil
+            mqttReconnectTimer?.invalidate(); mqttReconnectTimer = nil
+            mqttAvailabilityTimer?.invalidate(); mqttAvailabilityTimer = nil
         }
         .sheet(isPresented: $showAdvanced) {
             VStack(spacing: 0) {
@@ -429,6 +455,16 @@ struct ContentView: View {
                         mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
                             publishMQTTStatus()
                         }
+                        mqttReconnectTimer?.invalidate()
+                        mqttReconnectTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+                            ensureMQTTConnection()
+                        }
+                        ensureMQTTConnection(force: true)
+                        mqttAvailabilityTimer?.invalidate()
+                        mqttAvailabilityTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(30 * 60), repeats: true) { _ in
+                            sendAvailabilityHeartbeat()
+                        }
+                        sendAvailabilityHeartbeat(force: true)
                         if let url = URL(string: "ws://10.107.188.153:8888"), let client = mqttClient {
                             client.updateConfig(wsURL: url, username: "user", password: "user", topicPrefix: prefix)
                         } else {
@@ -507,6 +543,9 @@ struct ContentView: View {
                 appendMQTTLog("Connection: \(connected ? "online" : "offline")")
                 if connected {
                     publishMQTTStatus()
+                    sendAvailabilityHeartbeat(force: true)
+                } else {
+                    lastAvailabilitySentAt = .distantPast
                 }
             }
         }
@@ -519,6 +558,35 @@ struct ContentView: View {
         }
 
         client.connect()
+    }
+
+    private func ensureMQTTConnection(force: Bool = false) {
+        let now = Date()
+        let minInterval: TimeInterval = 10
+        if !force, now.timeIntervalSince(lastMQTTConnectAttempt) < minInterval {
+            return
+        }
+        if mqttClient == nil {
+            setupMQTT()
+            lastMQTTConnectAttempt = now
+            return
+        }
+        if mqttConnected {
+            return
+        }
+        lastMQTTConnectAttempt = now
+        mqttClient?.connect()
+    }
+
+    private func sendAvailabilityHeartbeat(force: Bool = false) {
+        guard mqttConnected, let client = mqttClient else { return }
+        let now = Date()
+        let minInterval: TimeInterval = force ? 5 : 60
+        if now.timeIntervalSince(lastAvailabilitySentAt) < minInterval {
+            return
+        }
+        lastAvailabilitySentAt = now
+        client.publishAvailability(online: true)
     }
 
     private func publishMQTTStatus(force: Bool = false) {

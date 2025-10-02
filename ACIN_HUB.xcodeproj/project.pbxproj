@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		88C641AC2E8E8B28004F18B7 /* CocoaMQTT in Frameworks */ = {isa = PBXBuildFile; productRef = 88C641AB2E8E8B28004F18B7 /* CocoaMQTT */; };
+		88C641AE2E8E8B28004F18B7 /* CocoaMQTTWebSocket in Frameworks */ = {isa = PBXBuildFile; productRef = 88C641AD2E8E8B28004F18B7 /* CocoaMQTTWebSocket */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		D062CB0C2D0A318400F81488 /* ACIN_HUB.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ACIN_HUB.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +28,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				88C641AE2E8E8B28004F18B7 /* CocoaMQTTWebSocket in Frameworks */,
+				88C641AC2E8E8B28004F18B7 /* CocoaMQTT in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +72,8 @@
 			);
 			name = ACIN_HUB;
 			packageProductDependencies = (
+				88C641AB2E8E8B28004F18B7 /* CocoaMQTT */,
+				88C641AD2E8E8B28004F18B7 /* CocoaMQTTWebSocket */,
 			);
 			productName = ACIN_HUB;
 			productReference = D062CB0C2D0A318400F81488 /* ACIN_HUB.app */;
@@ -94,6 +103,9 @@
 			);
 			mainGroup = D062CB032D0A318400F81488;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				88C641AA2E8E8B28004F18B7 /* XCRemoteSwiftPackageReference "CocoaMQTT" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D062CB0D2D0A318400F81488 /* Products */;
 			projectDirPath = "";
@@ -254,7 +266,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1010;
+				CURRENT_PROJECT_VERSION = 1012;
 				DEVELOPMENT_ASSET_PATHS = "\"ACIN_HUB/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -274,7 +286,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 2.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.scafra.ACIN-HUB";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -293,7 +305,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1010;
+				CURRENT_PROJECT_VERSION = 1012;
 				DEVELOPMENT_ASSET_PATHS = "\"ACIN_HUB/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -313,7 +325,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 2.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.scafra.ACIN-HUB";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -348,6 +360,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		88C641AA2E8E8B28004F18B7 /* XCRemoteSwiftPackageReference "CocoaMQTT" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/emqx/CocoaMQTT.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.1.9;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		88C641AB2E8E8B28004F18B7 /* CocoaMQTT */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 88C641AA2E8E8B28004F18B7 /* XCRemoteSwiftPackageReference "CocoaMQTT" */;
+			productName = CocoaMQTT;
+		};
+		88C641AD2E8E8B28004F18B7 /* CocoaMQTTWebSocket */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 88C641AA2E8E8B28004F18B7 /* XCRemoteSwiftPackageReference "CocoaMQTT" */;
+			productName = CocoaMQTTWebSocket;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D062CB042D0A318400F81488 /* Project object */;
 }
