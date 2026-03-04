@@ -266,7 +266,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1012;
+				CURRENT_PROJECT_VERSION = 1018;
 				DEVELOPMENT_ASSET_PATHS = "\"ACIN_HUB/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -274,6 +274,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "ACIN HUB";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Controllo video";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "L’app comunica con i dispositivi dell’ufficio sulla rete locale";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Necessario per consentire alla web app ACIN HUB di utilizzare il microfono.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -286,7 +287,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.3;
+				MARKETING_VERSION = 2.0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.scafra.ACIN-HUB";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -305,7 +306,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1012;
+				CURRENT_PROJECT_VERSION = 1018;
 				DEVELOPMENT_ASSET_PATHS = "\"ACIN_HUB/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -313,6 +314,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "ACIN HUB";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Controllo video";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "L’app comunica con i dispositivi dell’ufficio sulla rete locale";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Necessario per consentire alla web app ACIN HUB di utilizzare il microfono.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -325,7 +327,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.3;
+				MARKETING_VERSION = 2.0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.scafra.ACIN-HUB";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

@@ -56,11 +56,13 @@ func normalizedTopicPrefix(_ prefix: String) -> String {
 struct WebView: UIViewRepresentable {
     @Binding var urlString: String
     @Binding var reloadTrigger: Int      // just a counter; its value isn’t used
-    
+
     func makeUIView(context: Context) -> WKWebView {
-        WKWebView(frame: .zero)          // one instance for life of the SwiftUI view
+        let webView = WKWebView(frame: .zero)
+        webView.uiDelegate = context.coordinator
+        return webView
     }
-    
+
     func updateUIView(_ uiView: WKWebView, context: Context) {
         if let url = URL(string: urlString) {
             if uiView.url != url {
@@ -71,6 +73,82 @@ struct WebView: UIViewRepresentable {
                     reloadTrigger = 0        // one-shot
                 }
             }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator: NSObject, WKUIDelegate {
+        private let defaults = UserDefaults.standard
+        private let permissionPrefix = "web_mic_permission_"
+
+        @available(iOS 15.0, *)
+        func webView(_ webView: WKWebView,
+                     requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                     initiatedByFrame frame: WKFrameInfo,
+                     type: WKMediaCaptureType,
+                     decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+            switch type {
+            case .microphone, .cameraAndMicrophone:
+                handleMicrophonePermission(for: origin, decisionHandler: decisionHandler)
+            default:
+                DispatchQueue.main.async {
+                    decisionHandler(.prompt)
+                }
+            }
+        }
+
+        @available(iOS 15.0, *)
+        private func handleMicrophonePermission(for origin: WKSecurityOrigin,
+                                                decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+            let key = permissionKey(for: origin)
+            let session = AVAudioSession.sharedInstance()
+
+            let respond: (Bool) -> Void = { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        self.defaults.set(true, forKey: key)
+                        decisionHandler(.grant)
+                    } else {
+                        self.defaults.removeObject(forKey: key)
+                        decisionHandler(.deny)
+                    }
+                }
+            }
+
+            if defaults.bool(forKey: key), session.recordPermission == .granted {
+                DispatchQueue.main.async {
+                    decisionHandler(.grant)
+                }
+                return
+            } else if defaults.bool(forKey: key), session.recordPermission != .granted {
+                defaults.removeObject(forKey: key)
+            }
+
+            switch session.recordPermission {
+            case .granted:
+                respond(true)
+            case .denied:
+                respond(false)
+            case .undetermined:
+                session.requestRecordPermission { granted in
+                    respond(granted)
+                }
+            @unknown default:
+                DispatchQueue.main.async {
+                    decisionHandler(.prompt)
+                }
+            }
+        }
+
+        @available(iOS 15.0, *)
+        private func permissionKey(for origin: WKSecurityOrigin) -> String {
+            let scheme = origin.`protocol`
+            let host = origin.host
+            let port = origin.port
+            return "\(permissionPrefix)\(scheme)_\(host)_\(port)"
         }
     }
 }
@@ -144,7 +222,7 @@ struct ContentView: View {
     private let alarmPlayer = AlarmPlayer()
     private let videoUploader = VideoCaptureUploader(uploadURL: URL(string: "http://10.107.188.153:3006/upload")!)
 
-    private let baseServerURL = "http://10.107.188.153"
+    private let baseServerURL = "https://acin.hub.accenture.com"
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -465,7 +543,7 @@ struct ContentView: View {
                             sendAvailabilityHeartbeat()
                         }
                         sendAvailabilityHeartbeat(force: true)
-                        if let url = URL(string: "ws://10.107.188.153:8888"), let client = mqttClient {
+                        if let url = URL(string: "wss://acin.hub.accenture.com:8888/ws"), let client = mqttClient {
                             client.updateConfig(wsURL: url, username: "user", password: "user", topicPrefix: prefix)
                         } else {
                             setupMQTT()
@@ -526,7 +604,7 @@ struct ContentView: View {
     }
 
     private func setupMQTT() {
-        guard let url = URL(string: "ws://10.107.188.153:8888") else { return }
+        guard let url = URL(string: "wss://acin.hub.accenture.com:8888/ws") else { return }
         let slug = deviceSlug.isEmpty ? makeMQTTDeviceSlug(from: deviceName) : deviceSlug
         deviceSlug = slug
         let prefix = normalizedTopicPrefix(brokerTopicPrefix)

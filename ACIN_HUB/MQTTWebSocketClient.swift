@@ -19,6 +19,7 @@ final class MQTTWebSocketClient: NSObject {
     // Internal state
     private var mqtt: CocoaMQTT?
     private var isMQTTConnected = false
+    private var isConnecting = false
     private var pendingPublishes: [(topic: String, payload: Data, retain: Bool)] = []
     private var lastAvailabilitySent: (online: Bool, at: Date)?
 
@@ -49,6 +50,15 @@ final class MQTTWebSocketClient: NSObject {
 
     func connect() {
         log("Connecting to \(wsURL.absoluteString)")
+        if isMQTTConnected {
+            log("Skipping connect: already connected")
+            onConnectionChange?(true)
+            return
+        }
+        if isConnecting {
+            log("Skipping connect: connection already in progress")
+            return
+        }
         tearDownCurrentClient(publishOffline: false)
         let sanitizedURL = MQTTWebSocketClient.sanitizedWSURL(wsURL)
         guard let host = sanitizedURL.host else {
@@ -63,7 +73,19 @@ final class MQTTWebSocketClient: NSObject {
         }
 
         let websocket = CocoaMQTTWebSocket(uri: uri)
+        websocket.headers["Sec-WebSocket-Protocol"] = "mqtt"
+        let originScheme = sanitizedURL.scheme == "wss" ? "https" : "http"
+        let originPort = sanitizedURL.port ?? (sanitizedURL.scheme == "wss" ? 443 : 80)
+        let origin = "\(originScheme)://\(host):\(originPort)"
+        websocket.headers["Origin"] = origin
+        if sanitizedURL.scheme == "wss" {
+            websocket.enableSSL = true
+        }
         let client = CocoaMQTT(clientID: clientIdentifier, host: host, port: port, socket: websocket)
+        if sanitizedURL.scheme == "wss" {
+            client.sslSettings = [kCFStreamSSLPeerName as String: host as NSString]
+        }
+        client.logLevel = .debug
         client.username = username
         client.password = password
         client.keepAlive = keepAliveSeconds
@@ -76,7 +98,12 @@ final class MQTTWebSocketClient: NSObject {
         client.willMessage = CocoaMQTTMessage(topic: availabilityTopic, string: "offline", qos: .qos0, retained: true)
 
         mqtt = client
-        _ = client.connect()
+        isConnecting = true
+        let started = client.connect(timeout: 30)
+        log("connect() started=\(started)")
+        if !started {
+            isConnecting = false
+        }
     }
 
     func disconnect(suppressReconnect: Bool = true, publishOffline: Bool = true) {
@@ -165,6 +192,7 @@ final class MQTTWebSocketClient: NSObject {
         mqtt?.disconnect()
         mqtt = nil
         isMQTTConnected = false
+        isConnecting = false
         lastAvailabilitySent = nil
     }
 
@@ -213,11 +241,13 @@ extension MQTTWebSocketClient: CocoaMQTTDelegate {
         log("MQTT didConnectAck: \(ack.rawValue) \(ack)")
         guard ack == .accept else {
             isMQTTConnected = false
+            isConnecting = false
             onConnectionChange?(false)
             mqtt.disconnect()
             return
         }
         isMQTTConnected = true
+        isConnecting = false
         onConnectionChange?(true)
         let cmdTopic = topicPath([deviceId, "cmd"])
         mqtt.subscribe(cmdTopic, qos: .qos0)
@@ -258,10 +288,24 @@ extension MQTTWebSocketClient: CocoaMQTTDelegate {
 
     func mqttDidDisconnect(_ mqtt: CocoaMQTT, withError err: Error?) {
         isMQTTConnected = false
-        let reason = err?.localizedDescription ?? "nil"
-        log("MQTT didDisconnect error=\(reason)")
+        isConnecting = false
+        if let error = err as NSError? {
+            log("MQTT didDisconnect error=\(error.domain) code=\(error.code) desc=\(error.localizedDescription)")
+        } else {
+            log("MQTT didDisconnect error=nil")
+        }
         onConnectionChange?(false)
     }
+
+    func mqtt(_ mqtt: CocoaMQTT, didStateChangeTo state: CocoaMQTTConnState) {
+        log("MQTT state -> \(state)")
+    }
+
+    func mqtt(_ mqtt: CocoaMQTT, didReceive trust: SecTrust, completionHandler: @escaping (Bool) -> Void) {
+        log("MQTT didReceive trust: accepting server certificate")
+        completionHandler(true)
+    }
+
 }
 
 /// Helper to build JSON status payloads consistently.

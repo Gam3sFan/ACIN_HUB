@@ -13,7 +13,7 @@ ACIN_HUB è un’app iPad stile kiosk (iOS 15.8+) che mostra contenuti web a sch
 - iOS 15.8 target minimo
 - Rete locale raggiungibile verso:
   - Web server (default): `http://10.107.188.153`
-  - Broker MQTT via WebSocket (default): `ws://10.107.188.153:8888`
+  - Broker MQTT via WebSocket (default): `wss://acin.hub.accenture.com:8888/ws`
   - Endpoint upload video (default): `http://10.107.188.153:3006/upload`
 
 ## Funzionalità principali
