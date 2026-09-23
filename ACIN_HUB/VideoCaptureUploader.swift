@@ -188,15 +188,11 @@ final class VideoCaptureUploader: NSObject, AVCaptureFileOutputRecordingDelegate
 
         try? handle.close()
 
-        // Background session
-        let config = URLSessionConfiguration.background(withIdentifier: "com.acin-hub.upload")
-        config.isDiscretionary = false
-        config.sessionSendsLaunchEvents = true
-        config.allowsExpensiveNetworkAccess = true
-        config.allowsConstrainedNetworkAccess = true
-        let session = URLSession(configuration: config, delegate: BackgroundSessionHandler.shared, delegateQueue: nil)
-
-        let task = session.uploadTask(with: request, fromFile: multipartURL)
+        // Use the single shared background session.
+        // Creating a new URLSession with the same identifier would raise an exception.
+        let task = URLSession.backgroundUpload.uploadTask(with: request, fromFile: multipartURL)
+        // Register the multipart temp file so the delegate removes it when the task completes.
+        BackgroundSessionHandler.shared.registerTempFile(multipartURL, for: task)
         task.resume()
     }
 

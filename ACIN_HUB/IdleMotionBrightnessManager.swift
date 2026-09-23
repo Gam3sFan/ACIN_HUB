@@ -35,6 +35,8 @@ final class IdleMotionBrightnessManager: ObservableObject {
                 motionSensitivity = clamped
                 return
             }
+            // Cache derived threshold so the motion queue does not need to hop on main.
+            cachedMotionThreshold = 0.15 / Double(clamped)
             persist()
         }
     }
@@ -55,6 +57,9 @@ final class IdleMotionBrightnessManager: ObservableObject {
     private var lastInteraction: Date = Date()
     private var lastMagnitude: Double?
     private var forcedBrightnessPercent: Int?
+    /// Pre-computed motion threshold, written from main on `motionSensitivity` change,
+    /// read from the motion background queue. Double reads are atomic on 64-bit ARM.
+    private var cachedMotionThreshold: Double = 0.15 / 5.0
 
     init() {
         let defaults = UserDefaults.standard
@@ -67,6 +72,9 @@ final class IdleMotionBrightnessManager: ObservableObject {
         self.idleSeconds = defaults.integer(forKey: "idleSeconds")
         if defaults.object(forKey: "idleSeconds") == nil { self.idleSeconds = 90 }
         if self.idleSeconds < 20 { self.idleSeconds = 20 }
+
+        // Initialize cached threshold from the loaded sensitivity value.
+        self.cachedMotionThreshold = 0.15 / Double(max(1, self.motionSensitivity))
 
         start()
     }
@@ -131,10 +139,8 @@ final class IdleMotionBrightnessManager: ObservableObject {
         var moved = false
         if let last = lastMagnitude {
             let delta = fabs(magnitude - last)
-            // Snapshot sensitivity on main thread to avoid threading issues with @Published
-            let sensitivity = DispatchQueue.main.sync { self.motionSensitivity }
-            let threshold = 0.15 / Double(sensitivity)
-            if delta > threshold { moved = true }
+            // Read pre-computed threshold (refreshed on main when sensitivity changes).
+            if delta > cachedMotionThreshold { moved = true }
         }
         lastMagnitude = magnitude
         if moved {

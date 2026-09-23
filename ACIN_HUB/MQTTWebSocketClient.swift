@@ -85,7 +85,7 @@ final class MQTTWebSocketClient: NSObject {
         if sanitizedURL.scheme == "wss" {
             client.sslSettings = [kCFStreamSSLPeerName as String: host as NSString]
         }
-        client.logLevel = .debug
+        client.logLevel = .warning
         client.username = username
         client.password = password
         client.keepAlive = keepAliveSeconds
@@ -97,8 +97,11 @@ final class MQTTWebSocketClient: NSObject {
         let availabilityTopic = topicPath([deviceId, "availability"])
         client.willMessage = CocoaMQTTMessage(topic: availabilityTopic, string: "offline", qos: .qos0, retained: true)
 
-        mqtt = client
+        // Set isConnecting before invoking connect() so that any synchronous delegate
+        // callback (didConnectAck/didDisconnect) fired from within connect() observes
+        // the in-progress state correctly.
         isConnecting = true
+        mqtt = client
         let started = client.connect(timeout: 30)
         log("connect() started=\(started)")
         if !started {

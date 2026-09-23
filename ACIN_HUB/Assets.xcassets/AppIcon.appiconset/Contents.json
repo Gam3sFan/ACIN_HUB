@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "acinhub_iconv2-iOS-Default-1024x1024@1x 1.png",
+      "filename" : "acinhub_iconv2-iOS-Default-1024x1024@1x 2.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "acinhub_iconv2-iOS-Default-1024x1024@1x 2.png",
+      "filename" : "acinhub_iconv2-iOS-Default-1024x1024@1x 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"

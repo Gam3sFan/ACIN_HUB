@@ -38,6 +38,11 @@ func getWiFiAddress() -> String? {
     return address
 }
 
+struct LogEntry: Identifiable {
+    let id = UUID()
+    let text: String
+}
+
 func makeMQTTDeviceSlug(from name: String) -> String {
     let folded = name.folding(options: [.diacriticInsensitive], locale: .current)
     let lowered = folded.lowercased()
@@ -203,17 +208,15 @@ struct ContentView: View {
     @State private var showBanner = false
     @State private var bannerText = ""
     @State private var showAdvanced = false
-    @State private var mqttLogs: [String] = []
+    @State private var mqttLogs: [LogEntry] = []
     @State private var mqttConnected: Bool = false
+    @State private var batteryObserver: NSObjectProtocol? = nil
 
-    @State private var brokerUsername: String = UserDefaults.standard.string(forKey: "mqtt_ws_user") ?? "user"
-    @State private var brokerPassword: String = UserDefaults.standard.string(forKey: "mqtt_ws_pass") ?? "user"
     @State private var brokerTopicPrefix: String = {
         let stored = UserDefaults.standard.string(forKey: "mqtt_topic_prefix") ?? "office/ipads"
         return normalizedTopicPrefix(stored)
     }()
 
-    @State private var statusIntervalMinutes: Int = 60
     @State private var lastMQTTStatusSentAt: Date = .distantPast
     @State private var lastMQTTConnectAttempt: Date = .distantPast
     @State private var lastAvailabilitySentAt: Date = .distantPast
@@ -225,14 +228,14 @@ struct ContentView: View {
     private let baseServerURL = "https://acin.hub.accenture.com"
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .topLeading) {
             WebView(urlString: $url, reloadTrigger: $reloadTrigger)
                 .contentShape(Rectangle())
                 .onTapGesture { brightnessManager.noteUserInteraction() }
             Button(action: { showPopover = true }) {
                 Image(systemName: "gear")
                     .frame(width: 50, height: 50)
-                    .opacity(0.01)
+                    .opacity(0.03)
             }
             .popover(isPresented: $showPopover) {
                 ScrollView {
@@ -376,32 +379,20 @@ struct ContentView: View {
             deviceName = currentName
             deviceSlug = makeMQTTDeviceSlug(from: currentName)
             brokerTopicPrefix = normalizedTopicPrefix(brokerTopicPrefix)
-            statusIntervalMinutes = 60
-            UserDefaults.standard.set(statusIntervalMinutes, forKey: "mqtt_status_minutes")
-            
+
             UIDevice.current.isBatteryMonitoringEnabled = true
             isCharging = (UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full)
-            NotificationCenter.default.addObserver(forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) { _ in
-                handleBatteryChange()
+            if batteryObserver == nil {
+                batteryObserver = NotificationCenter.default.addObserver(forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) { _ in
+                    handleBatteryChange()
+                }
             }
             // MQTT setup
             setupMQTT()
             // Add videoUploader log callback to MQTT log view
             videoUploader.onLog = { msg in appendMQTTLog("Video: \(msg)") }
-            // Periodic MQTT status every X minutes
-            mqttTimer?.invalidate()
-            mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
-                publishMQTTStatus()
-            }
-            mqttReconnectTimer?.invalidate()
-            mqttReconnectTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
-                ensureMQTTConnection()
-            }
+            restartTimers()
             ensureMQTTConnection(force: true)
-            mqttAvailabilityTimer?.invalidate()
-            mqttAvailabilityTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(30 * 60), repeats: true) { _ in
-                sendAvailabilityHeartbeat()
-            }
             sendAvailabilityHeartbeat(force: true)
         }
         .statusBar(hidden: true)
@@ -421,7 +412,10 @@ struct ContentView: View {
             }
         }
         .onDisappear {
-            NotificationCenter.default.removeObserver(self, name: UIDevice.batteryStateDidChangeNotification, object: nil)
+            if let observer = batteryObserver {
+                NotificationCenter.default.removeObserver(observer)
+                batteryObserver = nil
+            }
             mqttTimer?.invalidate(); mqttTimer = nil
             mqttReconnectTimer?.invalidate(); mqttReconnectTimer = nil
             mqttAvailabilityTimer?.invalidate(); mqttAvailabilityTimer = nil
@@ -502,8 +496,8 @@ struct ContentView: View {
                         Text("Log MQTT").font(.headline)
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 4) {
-                                ForEach(Array(mqttLogs.enumerated()), id: \.offset) { _, line in
-                                    Text(line).font(.system(.footnote, design: .monospaced)).frame(maxWidth: .infinity, alignment: .leading)
+                                ForEach(mqttLogs) { entry in
+                                    Text(entry.text).font(.system(.footnote, design: .monospaced)).frame(maxWidth: .infinity, alignment: .leading)
                                 }
                             }
                         }
@@ -527,21 +521,8 @@ struct ContentView: View {
                         let prefix = normalizedTopicPrefix(brokerTopicPrefix)
                         brokerTopicPrefix = prefix
                         UserDefaults.standard.set(prefix, forKey: "mqtt_topic_prefix")
-                        statusIntervalMinutes = 60
-                        UserDefaults.standard.set(statusIntervalMinutes, forKey: "mqtt_status_minutes")
-                        mqttTimer?.invalidate()
-                        mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
-                            publishMQTTStatus()
-                        }
-                        mqttReconnectTimer?.invalidate()
-                        mqttReconnectTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
-                            ensureMQTTConnection()
-                        }
+                        restartTimers()
                         ensureMQTTConnection(force: true)
-                        mqttAvailabilityTimer?.invalidate()
-                        mqttAvailabilityTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(30 * 60), repeats: true) { _ in
-                            sendAvailabilityHeartbeat()
-                        }
                         sendAvailabilityHeartbeat(force: true)
                         if let url = URL(string: "wss://acin.hub.accenture.com:8888/ws"), let client = mqttClient {
                             client.updateConfig(wsURL: url, username: "user", password: "user", topicPrefix: prefix)
@@ -603,8 +584,30 @@ struct ContentView: View {
         }
     }
 
+    private func restartTimers() {
+        mqttTimer?.invalidate()
+        mqttTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 60), repeats: true) { _ in
+            publishMQTTStatus()
+        }
+        mqttReconnectTimer?.invalidate()
+        mqttReconnectTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+            ensureMQTTConnection()
+        }
+        mqttAvailabilityTimer?.invalidate()
+        mqttAvailabilityTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(30 * 60), repeats: true) { _ in
+            sendAvailabilityHeartbeat()
+        }
+    }
+
     private func setupMQTT() {
         guard let url = URL(string: "wss://acin.hub.accenture.com:8888/ws") else { return }
+        // Tear down any previous client so its lingering callbacks don't fire after replacement.
+        if let previous = mqttClient {
+            previous.onLog = nil
+            previous.onConnectionChange = nil
+            previous.onMessage = nil
+            previous.disconnect()
+        }
         let slug = deviceSlug.isEmpty ? makeMQTTDeviceSlug(from: deviceName) : deviceSlug
         deviceSlug = slug
         let prefix = normalizedTopicPrefix(brokerTopicPrefix)
@@ -740,7 +743,7 @@ struct ContentView: View {
     private func appendMQTTLog(_ message: String) {
         struct StaticDF { static let df: DateFormatter = { let d = DateFormatter(); d.dateFormat = "HH:mm:ss"; return d }() }
         let line = "[\(StaticDF.df.string(from: Date()))] \(message)"
-        mqttLogs.append(line)
+        mqttLogs.append(LogEntry(text: line))
         if mqttLogs.count > 500 { mqttLogs.removeFirst(mqttLogs.count - 500) }
     }
 
