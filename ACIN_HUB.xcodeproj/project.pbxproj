@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		88C641AC2E8E8B28004F18B7 /* CocoaMQTT in Frameworks */ = {isa = PBXBuildFile; productRef = 88C641AB2E8E8B28004F18B7 /* CocoaMQTT */; };
-		88C641AE2E8E8B28004F18B7 /* CocoaMQTTWebSocket in Frameworks */ = {isa = PBXBuildFile; productRef = 88C641AD2E8E8B28004F18B7 /* CocoaMQTTWebSocket */; };
+		889FFFB230641A5700708F55 /* CocoaMQTT in Frameworks */ = {isa = PBXBuildFile; productRef = 889FFFB130641A5700708F55 /* CocoaMQTT */; };
+		889FFFB430641A5700708F55 /* CocoaMQTTWebSocket in Frameworks */ = {isa = PBXBuildFile; productRef = 889FFFB330641A5700708F55 /* CocoaMQTTWebSocket */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,8 +28,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				88C641AE2E8E8B28004F18B7 /* CocoaMQTTWebSocket in Frameworks */,
-				88C641AC2E8E8B28004F18B7 /* CocoaMQTT in Frameworks */,
+				889FFFB430641A5700708F55 /* CocoaMQTTWebSocket in Frameworks */,
+				889FFFB230641A5700708F55 /* CocoaMQTT in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,8 +72,8 @@
 			);
 			name = ACIN_HUB;
 			packageProductDependencies = (
-				88C641AB2E8E8B28004F18B7 /* CocoaMQTT */,
-				88C641AD2E8E8B28004F18B7 /* CocoaMQTTWebSocket */,
+				889FFFB130641A5700708F55 /* CocoaMQTT */,
+				889FFFB330641A5700708F55 /* CocoaMQTTWebSocket */,
 			);
 			productName = ACIN_HUB;
 			productReference = D062CB0C2D0A318400F81488 /* ACIN_HUB.app */;
@@ -104,7 +104,7 @@
 			mainGroup = D062CB032D0A318400F81488;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				88C641AA2E8E8B28004F18B7 /* XCRemoteSwiftPackageReference "CocoaMQTT" */,
+				889FFFB030641A5700708F55 /* XCLocalSwiftPackageReference "LocalPackages/CocoaMQTT" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D062CB0D2D0A318400F81488 /* Products */;
@@ -363,26 +363,20 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		88C641AA2E8E8B28004F18B7 /* XCRemoteSwiftPackageReference "CocoaMQTT" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/emqx/CocoaMQTT.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.1.9;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		889FFFB030641A5700708F55 /* XCLocalSwiftPackageReference "LocalPackages/CocoaMQTT" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LocalPackages/CocoaMQTT;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		88C641AB2E8E8B28004F18B7 /* CocoaMQTT */ = {
+		889FFFB130641A5700708F55 /* CocoaMQTT */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 88C641AA2E8E8B28004F18B7 /* XCRemoteSwiftPackageReference "CocoaMQTT" */;
 			productName = CocoaMQTT;
 		};
-		88C641AD2E8E8B28004F18B7 /* CocoaMQTTWebSocket */ = {
+		889FFFB330641A5700708F55 /* CocoaMQTTWebSocket */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 88C641AA2E8E8B28004F18B7 /* XCRemoteSwiftPackageReference "CocoaMQTT" */;
 			productName = CocoaMQTTWebSocket;
 		};
 /* End XCSwiftPackageProductDependency section */
