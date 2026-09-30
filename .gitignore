@@ -1,1 +1,5 @@
 .DS_Store
+
+# Stato UI di Xcode, per-utente: non va condiviso
+xcuserdata/
+*.xcuserstate
